@@ -18,3 +18,7 @@ openssl req -newkey rsa:4096 -keyout private.key -x509 -days 3650 -out certifica
 openssl pkcs12 -inkey private.key -in certificate.crt -export -out certificate.pfx
 ```
 
+On Linux, this example can be run using Microsoft's .NET on Linux (https://learn.microsoft.com/en-us/dotnet/core/install/linux) and run the following command:
+```
+$ dotnet run
+```
