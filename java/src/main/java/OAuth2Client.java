@@ -24,6 +24,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -36,8 +37,6 @@ import java.util.stream.Stream;
 import static java.lang.String.join;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.temporal.ChronoUnit.SECONDS;
-import static java.util.Arrays.stream;
-import static java.util.stream.Collectors.toList;
 
 public class OAuth2Client {
 
@@ -54,6 +53,7 @@ public class OAuth2Client {
     private final int callbackServerPort;
     private final String authEndpoint;
     private final String tokenEndpoint;
+    private final String revocationEndpoint;
     private final String clientId;
     private final String clientAssertionAudience;
     private final String redirectUri;
@@ -64,6 +64,7 @@ public class OAuth2Client {
             int callbackServerPort,
             String authEndpoint,
             String tokenEndpoint,
+            String revocationEndpoint,
             String clientId,
             RSAPrivateKey privateKey,
             String clientAssertionAudience
@@ -74,18 +75,19 @@ public class OAuth2Client {
         this.redirectUri = "http://" + DEFAULT_CALLBACK_SERVER_HOST + ":" + callbackServerPort + "/";
         this.authEndpoint = authEndpoint;
         this.tokenEndpoint = tokenEndpoint;
+        this.revocationEndpoint = revocationEndpoint;
         this.clientId = clientId;
         this.clientAssertionAudience = clientAssertionAudience;
         this.httpClient = HttpClients.createDefault();
         this.mapper = new ObjectMapper();
     }
 
-    public OAuth2Client(int callbackServerPort, String authEndpoint, String tokenEndpoint, String clientId) {
-        this(callbackServerPort, authEndpoint, tokenEndpoint, clientId, null, null);
+    public OAuth2Client(int callbackServerPort, String authEndpoint, String tokenEndpoint, String revocationEndpoint, String clientId) {
+        this(callbackServerPort, authEndpoint, tokenEndpoint, revocationEndpoint, clientId, null, null);
     }
 
-    public OAuth2Client(String authEndpoint, String tokenEndpoint, String clientId) {
-        this(DEFAULT_CALLBACK_SERVER_PORT, authEndpoint, tokenEndpoint, clientId, null, null);
+    public OAuth2Client(String authEndpoint, String tokenEndpoint, String revocationEndpoint, String clientId) {
+        this(DEFAULT_CALLBACK_SERVER_PORT, authEndpoint, tokenEndpoint, revocationEndpoint, clientId, null, null);
     }
 
     /**
@@ -179,16 +181,7 @@ public class OAuth2Client {
      * @return A token response entity from the exchange request
      */
     public TokenResponseEntity codeToToken(String authorizationCode) {
-        final String clientAssertion = createClientAssertion();
-
-        final List<BasicNameValuePair> formParameters = new ArrayList<>();
-        if (clientAssertion == null) {
-            formParameters.add(new BasicNameValuePair("client_id", clientId));
-        } else {
-            formParameters.add(new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE));
-            formParameters.add(new BasicNameValuePair("client_assertion", clientAssertion));
-        }
-
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("redirect_uri", redirectUri));
         formParameters.add(new BasicNameValuePair("grant_type", "authorization_code"));
         formParameters.add(new BasicNameValuePair("code", authorizationCode));
@@ -214,17 +207,15 @@ public class OAuth2Client {
      * @see <a href="https://datatracker.ietf.org/doc/html/rfc8693">RFC8693</a>
      */
     public TokenResponseEntity exchangeToken(String subjectToken, String... scope) {
-        final String clientAssertion = createClientAssertion();
         final HttpPost httpPost = new HttpPost(tokenEndpoint);
-        httpPost.setEntity(new UrlEncodedFormEntity(List.of(
-                new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE),
-                new BasicNameValuePair("client_assertion", clientAssertion),
-                new BasicNameValuePair("grant_type", GRANT_TYPE_RFC8693),
-                new BasicNameValuePair("subject_token", subjectToken),
-                new BasicNameValuePair("requested_token_type", REQUESTED_TOKEN_TYPE_REFRESH_TOKEN),
-                new BasicNameValuePair("scope", join(" ", scope)),
-                new BasicNameValuePair("audience", clientId)
-        ), UTF_8));
+
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
+        formParameters.add(new BasicNameValuePair("grant_type", GRANT_TYPE_RFC8693));
+        formParameters.add(new BasicNameValuePair("subject_token", subjectToken));
+        formParameters.add(new BasicNameValuePair("requested_token_type", REQUESTED_TOKEN_TYPE_REFRESH_TOKEN));
+        formParameters.add(new BasicNameValuePair("scope", join(" ", scope)));
+        formParameters.add(new BasicNameValuePair("audience", clientId));
+        httpPost.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
 
         try (final CloseableHttpResponse response = httpClient.execute(httpPost)) {
             return getTokenResponseEntity(response);
@@ -240,14 +231,13 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity clientCredentialsGrantFlow(String... scope) {
-        final String clientAssertion = createClientAssertion();
         final HttpPost request = new HttpPost(tokenEndpoint);
-        request.setEntity(new UrlEncodedFormEntity(List.of(
-                new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE),
-                new BasicNameValuePair("client_assertion", clientAssertion),
-                new BasicNameValuePair("grant_type", "client_credentials"),
-                new BasicNameValuePair("scope", String.join(" ", scope))
-        ), UTF_8));
+
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
+        formParameters.add(new BasicNameValuePair("grant_type", "client_credentials"));
+        formParameters.add(new BasicNameValuePair("scope", String.join(" ", scope)));
+        request.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
+
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             return getTokenResponseEntity(response);
         } catch (IOException | ParseException e) {
@@ -262,17 +252,39 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity refreshTokenFlow(String refreshToken) {
-        final String clientAssertion = createClientAssertion();
         final HttpPost request = new HttpPost(tokenEndpoint);
-        request.setEntity(new UrlEncodedFormEntity(List.of(
-                new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE),
-                new BasicNameValuePair("client_assertion", clientAssertion),
-                new BasicNameValuePair("client_id", clientId),
-                new BasicNameValuePair("grant_type", "refresh_token"),
-                new BasicNameValuePair("refresh_token", refreshToken)
-        ), UTF_8));
+
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
+        formParameters.add(new BasicNameValuePair("grant_type", "refresh_token"));
+        formParameters.add(new BasicNameValuePair("refresh_token", refreshToken));
+        request.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
+
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             return getTokenResponseEntity(response);
+        } catch (IOException | ParseException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Example on how to revoke a refresh token using client assertion with a signed JWT
+     *
+     * @param refreshToken the refresh token to revoke
+     * @return the response entity from the token request
+     */
+    public void revokeRefreshToken(String refreshToken) {
+        final HttpPost request = new HttpPost(revocationEndpoint);
+
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
+        formParameters.add(new BasicNameValuePair("token", refreshToken));
+        formParameters.add(new BasicNameValuePair("token_type_hint", "refresh_token"));
+        request.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            final String responseEntity = EntityUtils.toString(response.getEntity());
+            if (response.getCode() != 200 || !responseEntity.isEmpty()) {
+                throw new ErrorResponseException(response.getCode(), responseEntity);
+            }
         } catch (IOException | ParseException e) {
             throw new RuntimeException(e);
         }
@@ -289,19 +301,15 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity password(String username, String password, NameValuePair... extraFields) {
-        final String clientAssertion = createClientAssertion();
         final HttpPost request = new HttpPost(tokenEndpoint);
-        request.setEntity(new UrlEncodedFormEntity(
-                Stream.concat(Stream.of(
-                                new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE),
-                                new BasicNameValuePair("client_assertion", clientAssertion),
-                                new BasicNameValuePair("client_id", clientId),
-                                new BasicNameValuePair("grant_type", "password"),
-                                new BasicNameValuePair("username", username),
-                                new BasicNameValuePair("password", password)
-                        ), stream(extraFields)
-                ).collect(toList()))
-        );
+
+        final List<NameValuePair> formParameters = getClientAuthenticationParameters();
+        formParameters.add(new BasicNameValuePair("grant_type", "password"));
+        formParameters.add(new BasicNameValuePair("username", username));
+        formParameters.add(new BasicNameValuePair("password", password));
+        formParameters.addAll(Arrays.asList(extraFields));
+        request.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
+
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             return getTokenResponseEntity(response);
         } catch (IOException | ParseException e) {
@@ -315,6 +323,20 @@ public class OAuth2Client {
         } else {
             throw new ErrorResponseException(response.getCode(), EntityUtils.toString(response.getEntity()));
         }
+    }
+
+    private List<NameValuePair> getClientAuthenticationParameters() {
+        final String clientAssertion = createClientAssertion();
+
+        final List<NameValuePair> formParameters = new ArrayList<>();
+        if (clientAssertion == null) {
+            formParameters.add(new BasicNameValuePair("client_id", clientId));
+        } else {
+            formParameters.add(new BasicNameValuePair("client_assertion_type", CLIENT_ASSERTION_TYPE));
+            formParameters.add(new BasicNameValuePair("client_assertion", clientAssertion));
+        }
+
+        return formParameters;
     }
 
     /**
