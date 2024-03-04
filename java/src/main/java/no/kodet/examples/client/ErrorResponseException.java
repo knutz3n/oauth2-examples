@@ -1,3 +1,5 @@
+package no.kodet.examples.client;
+
 public class ErrorResponseException extends RuntimeException {
     private final int statusCode;
     private final String errorPayload;

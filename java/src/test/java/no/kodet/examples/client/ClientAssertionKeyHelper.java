@@ -1,3 +1,5 @@
+package no.kodet.examples.client;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;

@@ -1,3 +1,5 @@
+package no.kodet.examples.client;
+
 import org.junit.jupiter.api.Test;
 
 import java.security.interfaces.RSAPrivateKey;
