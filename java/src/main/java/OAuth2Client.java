@@ -1,8 +1,10 @@
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -39,6 +41,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.temporal.ChronoUnit.SECONDS;
 
 public class OAuth2Client {
+    private static final CloseableHttpClient wellKnownConfigurationHttpClient = HttpClients.createDefault();
+    private static final ObjectReader wellKnownConfigurationReader = new ObjectMapper().readerFor(OpenIdWellKnownConfiguration.class);
 
     private static final String CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
     private static final String GRANT_TYPE_RFC8693 = "urn:ietf:params:oauth:grant-type:token-exchange";
@@ -51,43 +55,77 @@ public class OAuth2Client {
     private final Clock clock;
     private final RSAPrivateKey privateKey;
     private final int callbackServerPort;
-    private final String authEndpoint;
-    private final String tokenEndpoint;
-    private final String revocationEndpoint;
     private final String clientId;
-    private final String clientAssertionAudience;
     private final String redirectUri;
     private final CloseableHttpClient httpClient;
     private final ObjectMapper mapper;
+    private final OpenIdWellKnownConfiguration openIdWellKnownConfiguration;
 
     public OAuth2Client(
+            OpenIdWellKnownConfiguration openIdWellKnownConfiguration,
             int callbackServerPort,
-            String authEndpoint,
-            String tokenEndpoint,
-            String revocationEndpoint,
             String clientId,
-            RSAPrivateKey privateKey,
-            String clientAssertionAudience
+            RSAPrivateKey privateKey
     ) {
+        this.openIdWellKnownConfiguration = openIdWellKnownConfiguration;
         this.clock = Clock.systemUTC();
         this.privateKey = privateKey;
         this.callbackServerPort = callbackServerPort;
         this.redirectUri = "http://" + DEFAULT_CALLBACK_SERVER_HOST + ":" + callbackServerPort + "/";
-        this.authEndpoint = authEndpoint;
-        this.tokenEndpoint = tokenEndpoint;
-        this.revocationEndpoint = revocationEndpoint;
         this.clientId = clientId;
-        this.clientAssertionAudience = clientAssertionAudience;
         this.httpClient = HttpClients.createDefault();
         this.mapper = new ObjectMapper();
     }
 
     public OAuth2Client(int callbackServerPort, String authEndpoint, String tokenEndpoint, String revocationEndpoint, String clientId) {
-        this(callbackServerPort, authEndpoint, tokenEndpoint, revocationEndpoint, clientId, null, null);
+        this(new OpenIdWellKnownConfiguration(
+                null,
+                authEndpoint,
+                tokenEndpoint,
+                null,
+                null,
+                null,
+                revocationEndpoint,
+                null
+        ), callbackServerPort, clientId, null);
     }
 
     public OAuth2Client(String authEndpoint, String tokenEndpoint, String revocationEndpoint, String clientId) {
-        this(DEFAULT_CALLBACK_SERVER_PORT, authEndpoint, tokenEndpoint, revocationEndpoint, clientId, null, null);
+        this(new OpenIdWellKnownConfiguration(
+                null,
+                authEndpoint,
+                tokenEndpoint,
+                null,
+                null,
+                null,
+                revocationEndpoint,
+                null
+        ), DEFAULT_CALLBACK_SERVER_PORT, clientId, null);
+    }
+
+    public static OAuth2Client fromWellKnownConfiguration(
+            String wellKnownConfigurationEndpoint,
+            int callbackServerPort,
+            String clientId,
+            RSAPrivateKey privateKey
+    ) {
+        final OpenIdWellKnownConfiguration wellKnownConfiguration;
+        try {
+            wellKnownConfiguration = wellKnownConfigurationHttpClient.execute(
+                    new HttpGet(wellKnownConfigurationEndpoint),
+                    response -> {
+                        final String responseBody = EntityUtils.toString(response.getEntity());
+                        if (response.getCode() == 200) {
+                            return wellKnownConfigurationReader.readValue(responseBody);
+                        } else {
+                            throw new ErrorResponseException(response.getCode(), responseBody);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new ErrorResponseException(-1, e.getMessage());
+        }
+
+        return new OAuth2Client(wellKnownConfiguration, callbackServerPort, clientId, privateKey);
     }
 
     /**
@@ -108,7 +146,7 @@ public class OAuth2Client {
         final String state = UUID.randomUUID().toString();
         final URI authorizationUri;
         try {
-            authorizationUri = new URIBuilder(authEndpoint)
+            authorizationUri = new URIBuilder(openIdWellKnownConfiguration.authorizationEndpoint())
                     .addParameter("client_id", clientId)
                     .addParameter("redirect_uri", redirectUri)
                     .addParameter("state", state)
@@ -186,7 +224,7 @@ public class OAuth2Client {
         formParameters.add(new BasicNameValuePair("grant_type", "authorization_code"));
         formParameters.add(new BasicNameValuePair("code", authorizationCode));
 
-        final HttpPost request = new HttpPost(tokenEndpoint);
+        final HttpPost request = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
         request.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
 
         try (CloseableHttpResponse response = httpClient.execute(request)) {
@@ -207,7 +245,7 @@ public class OAuth2Client {
      * @see <a href="https://datatracker.ietf.org/doc/html/rfc8693">RFC8693</a>
      */
     public TokenResponseEntity exchangeToken(String subjectToken, String... scope) {
-        final HttpPost httpPost = new HttpPost(tokenEndpoint);
+        final HttpPost httpPost = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("grant_type", GRANT_TYPE_RFC8693));
@@ -231,7 +269,7 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity clientCredentialsGrantFlow(String... scope) {
-        final HttpPost request = new HttpPost(tokenEndpoint);
+        final HttpPost request = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("grant_type", "client_credentials"));
@@ -252,7 +290,7 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity refreshTokenFlow(String refreshToken) {
-        final HttpPost request = new HttpPost(tokenEndpoint);
+        final HttpPost request = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("grant_type", "refresh_token"));
@@ -273,7 +311,7 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public void revokeRefreshToken(String refreshToken) {
-        final HttpPost request = new HttpPost(revocationEndpoint);
+        final HttpPost request = new HttpPost(openIdWellKnownConfiguration.revocationEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("token", refreshToken));
@@ -301,7 +339,7 @@ public class OAuth2Client {
      * @return the response entity from the token request
      */
     public TokenResponseEntity password(String username, String password, NameValuePair... extraFields) {
-        final HttpPost request = new HttpPost(tokenEndpoint);
+        final HttpPost request = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("grant_type", "password"));
@@ -353,7 +391,7 @@ public class OAuth2Client {
                 .setId(UUID.randomUUID().toString())
                 .setIssuer(clientId)
                 .setSubject(clientId)
-                .setAudience(clientAssertionAudience)
+                .setAudience(openIdWellKnownConfiguration.issuer())
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plus(60, SECONDS)))
                 .setNotBefore(Date.from(now.minus(60, SECONDS)))

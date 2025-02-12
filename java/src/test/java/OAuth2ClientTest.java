@@ -5,17 +5,16 @@ import java.security.interfaces.RSAPrivateKey;
 public class OAuth2ClientTest {
 
     public static final String AUTH_SCOPE = "openid";
-    private static final String AUTH_ENDPOINT_URL = "<auth endpoint url>";
-    private static final String TOKEN_ENDPOINT_URL = "<token endpoint url>";
+    private static final String WELL_KNOWN_CONFIGURATION_ENDPOINT_URL = "<well known endpoint url>";
     private static final String CLIENT_ID = "<client_id>";
-    private static final String CLIENT_ASSERTION_AUDIENCE = "<client assertion JWT audience>";
 
     private final RSAPrivateKey privateKey = null;
     // OR:
     // private final RSAPrivateKey privateKey = ClientAssertionKeyHelper.readPrivateKey(new File("../../keys/private.pkcs8.pem"));
 
-    private final OAuth2Client oauth2Client = new OAuth2Client(
-            8000, AUTH_ENDPOINT_URL, TOKEN_ENDPOINT_URL, CLIENT_ID, privateKey, CLIENT_ASSERTION_AUDIENCE
+    private final OAuth2Client oauth2Client = OAuth2Client.fromWellKnownConfiguration(
+            WELL_KNOWN_CONFIGURATION_ENDPOINT_URL,
+            8000, CLIENT_ID, privateKey
     );
 
     @Test
@@ -61,7 +60,7 @@ public class OAuth2ClientTest {
     }
 
     @Test
-    void doExampleExchange() throws Exception {
+    void doExampleExchange() {
         final TokenResponseEntity accessToken = oauth2Client.authorizationCodeFlow(
                 AUTH_SCOPE
         );
@@ -69,8 +68,9 @@ public class OAuth2ClientTest {
         System.out.println("Access token to exchange:");
         System.out.println(accessToken.getParsedAccessToken());
 
-        final OAuth2Client tokenExchangeClient = new OAuth2Client(
-                8000, AUTH_ENDPOINT_URL, TOKEN_ENDPOINT_URL, CLIENT_ID, privateKey, CLIENT_ASSERTION_AUDIENCE
+        final OAuth2Client tokenExchangeClient = OAuth2Client.fromWellKnownConfiguration(
+                WELL_KNOWN_CONFIGURATION_ENDPOINT_URL,
+                8000, CLIENT_ID, privateKey
         );
         final TokenResponseEntity result = tokenExchangeClient.exchangeToken(
                 accessToken.getRawAccessToken(),
