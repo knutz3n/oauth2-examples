@@ -128,6 +128,10 @@ public class OAuth2Client {
         return new OAuth2Client(wellKnownConfiguration, callbackServerPort, clientId, privateKey);
     }
 
+    public OpenIdWellKnownConfiguration configuration() {
+        return openIdWellKnownConfiguration;
+    }
+
     /**
      * Example of a complete OAuth2 Authorization Code Flow.
      * <p>
@@ -178,15 +182,15 @@ public class OAuth2Client {
             try {
                 final TokenResponseEntity response = codeToToken(authorizationCode);
                 sendPlainTextResponse(exchange, 200,
-                        "Expires In: " + response.getExpiresIn() + "\n"
-                                + "Refresh Expires In: " + response.getRefreshExpiresIn() + "\n"
-                                + "Session State: " + response.getSessionState() + "\n"
-                                + "Not Before Policy: " + response.getNotBeforePolicy() + "\n"
-                                + "Token Type: " + response.getTokenType() + "\n"
-                                + "Scope: " + (response.getScope() == null ? null : join(", ", response.getScope())) + "\n\n"
-                                + "Access Token:\n" + response.getRawAccessToken() + "\n" + response.getParsedAccessToken() + "\n\n"
-                                + "ID Token:\n" + response.getRawIdToken() + "\n" + response.getParsedIdToken() + "\n\n"
-                                + "Refresh Token:\n" + response.getRawRefreshToken()
+                        "Expires In: " + response.expiresIn() + "\n"
+                                + "Refresh Expires In: " + response.refreshExpiresIn() + "\n"
+                                + "Session State: " + response.sessionState() + "\n"
+                                + "Not Before Policy: " + response.notBeforePolicy() + "\n"
+                                + "Token Type: " + response.tokenType() + "\n"
+                                + "Scope: " + response.scope() + "\n\n"
+                                + "Access Token:\n" + response.rawAccessToken() + "\n" + response.parsedAccessToken() + "\n\n"
+                                + "ID Token:\n" + response.rawIdToken() + "\n" + response.parsedIdToken() + "\n\n"
+                                + "Refresh Token:\n" + response.rawRefreshToken()
                 );
                 authTokenFuture.complete(response);
 

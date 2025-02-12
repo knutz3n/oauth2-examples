@@ -22,14 +22,14 @@ public class OAuth2ClientTest {
         try {
             final TokenResponseEntity response = oauth2Client.authorizationCodeFlow(AUTH_SCOPE);
             System.out.println("Access token:");
-            System.out.println(response.getRawAccessToken());
+            System.out.println(response.rawAccessToken());
             System.out.println();
             System.out.println("Parsed Access token body:");
-            System.out.println(response.getParsedAccessToken());
+            System.out.println(response.parsedAccessToken());
             System.out.println("Parsed ID token body:");
-            System.out.println(response.getParsedIdToken());
+            System.out.println(response.parsedIdToken());
             System.out.println("Refresh token:");
-            System.out.println(response.getRawRefreshToken());
+            System.out.println(response.rawRefreshToken());
         } catch (ErrorResponseException e) {
             System.out.println("Response code:");
             System.out.println(e.getStatusCode());
@@ -43,14 +43,14 @@ public class OAuth2ClientTest {
         try {
             final TokenResponseEntity response = oauth2Client.clientCredentialsGrantFlow("<scope>");
             System.out.println("Access token:");
-            System.out.println(response.getRawAccessToken());
+            System.out.println(response.rawAccessToken());
             System.out.println();
             System.out.println("Parsed Access token body:");
-            System.out.println(response.getParsedAccessToken());
+            System.out.println(response.parsedAccessToken());
             System.out.println("Parsed ID token body:");
-            System.out.println(response.getParsedIdToken());
+            System.out.println(response.parsedIdToken());
             System.out.println("Refresh token:");
-            System.out.println(response.getRawRefreshToken());
+            System.out.println(response.rawRefreshToken());
         } catch (ErrorResponseException e) {
             System.out.println("Response code:");
             System.out.println(e.getStatusCode());
@@ -66,19 +66,19 @@ public class OAuth2ClientTest {
         );
 
         System.out.println("Access token to exchange:");
-        System.out.println(accessToken.getParsedAccessToken());
+        System.out.println(accessToken.parsedAccessToken());
 
         final OAuth2Client tokenExchangeClient = OAuth2Client.fromWellKnownConfiguration(
                 WELL_KNOWN_CONFIGURATION_ENDPOINT_URL,
                 8000, CLIENT_ID, privateKey
         );
         final TokenResponseEntity result = tokenExchangeClient.exchangeToken(
-                accessToken.getRawAccessToken(),
+                accessToken.rawAccessToken(),
                 "<scope_1>", "<scope_2>"
         );
 
         System.out.println("Access token from token exchange:");
-        System.out.println(result.getParsedAccessToken());
+        System.out.println(result.parsedAccessToken());
     }
 
 }
