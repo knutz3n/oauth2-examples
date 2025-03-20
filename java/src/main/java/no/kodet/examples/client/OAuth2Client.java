@@ -218,6 +218,24 @@ public class OAuth2Client {
         }
     }
 
+    public void endSession() {
+        endSession(null);
+    }
+
+    public void endSession(String idTokenHint) {
+        try {
+            final URIBuilder endSessionUriBuilder = new URIBuilder(openIdWellKnownConfiguration.endSessionEndpoint());
+            if (idTokenHint != null && !idTokenHint.isBlank()) {
+                endSessionUriBuilder.addParameter("id_token_hint", idTokenHint);
+            }
+            final URI endSessionUri = endSessionUriBuilder.build();
+            System.out.println("Open browser:\n" + endSessionUri);
+            Desktop.getDesktop().browse(endSessionUri);
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * Exchange an authorization code to tokens
      *
