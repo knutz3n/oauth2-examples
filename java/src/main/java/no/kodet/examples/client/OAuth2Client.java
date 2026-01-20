@@ -275,7 +275,9 @@ public class OAuth2Client {
         formParameters.add(new BasicNameValuePair("grant_type", GRANT_TYPE_RFC8693));
         formParameters.add(new BasicNameValuePair("subject_token", subjectToken));
         formParameters.add(new BasicNameValuePair("requested_token_type", REQUESTED_TOKEN_TYPE_REFRESH_TOKEN));
-        formParameters.add(new BasicNameValuePair("scope", join(" ", scopes)));
+        if (scopes != null) {
+            formParameters.add(new BasicNameValuePair("scope", join(" ", scopes)));
+        }
         if (audience != null) {
             formParameters.add(new BasicNameValuePair("audience", audience));
         }
