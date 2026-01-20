@@ -268,14 +268,14 @@ public class OAuth2Client {
      * @return the response entity from the token exchange
      * @see <a href="https://datatracker.ietf.org/doc/html/rfc8693">RFC8693</a>
      */
-    public TokenResponseEntity exchangeToken(String subjectToken, String audience, String... scope) {
+    public TokenResponseEntity exchangeToken(String subjectToken, String audience, List<String> scopes) {
         final HttpPost httpPost = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
         formParameters.add(new BasicNameValuePair("grant_type", GRANT_TYPE_RFC8693));
         formParameters.add(new BasicNameValuePair("subject_token", subjectToken));
         formParameters.add(new BasicNameValuePair("requested_token_type", REQUESTED_TOKEN_TYPE_REFRESH_TOKEN));
-        formParameters.add(new BasicNameValuePair("scope", join(" ", scope)));
+        formParameters.add(new BasicNameValuePair("scope", join(" ", scopes)));
         if (audience != null) {
             formParameters.add(new BasicNameValuePair("audience", audience));
         }
