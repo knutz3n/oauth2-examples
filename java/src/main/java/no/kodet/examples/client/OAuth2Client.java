@@ -268,7 +268,7 @@ public class OAuth2Client {
      * @return the response entity from the token exchange
      * @see <a href="https://datatracker.ietf.org/doc/html/rfc8693">RFC8693</a>
      */
-    public TokenResponseEntity exchangeToken(String subjectToken, String... scope) {
+    public TokenResponseEntity exchangeToken(String subjectToken, String audience, String... scope) {
         final HttpPost httpPost = new HttpPost(openIdWellKnownConfiguration.tokenEndpoint());
 
         final List<NameValuePair> formParameters = getClientAuthenticationParameters();
@@ -276,7 +276,9 @@ public class OAuth2Client {
         formParameters.add(new BasicNameValuePair("subject_token", subjectToken));
         formParameters.add(new BasicNameValuePair("requested_token_type", REQUESTED_TOKEN_TYPE_REFRESH_TOKEN));
         formParameters.add(new BasicNameValuePair("scope", join(" ", scope)));
-        formParameters.add(new BasicNameValuePair("audience", clientId));
+        if (audience != null) {
+            formParameters.add(new BasicNameValuePair("audience", audience));
+        }
         httpPost.setEntity(new UrlEncodedFormEntity(formParameters, UTF_8));
 
         try (final CloseableHttpResponse response = httpClient.execute(httpPost)) {
