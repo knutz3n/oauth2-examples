@@ -3,6 +3,7 @@ package no.kodet.examples.client;
 import org.junit.jupiter.api.Test;
 
 import java.security.interfaces.RSAPrivateKey;
+import java.util.List;
 
 public class OAuth2ClientTest {
 
@@ -76,7 +77,8 @@ public class OAuth2ClientTest {
         );
         final TokenResponseEntity result = tokenExchangeClient.exchangeToken(
                 accessToken.rawAccessToken(),
-                "<scope_1>", "<scope_2>"
+                "<audience>",
+                List.of("<scope_1>", "<scope_2>")
         );
 
         System.out.println("Access token from token exchange:");

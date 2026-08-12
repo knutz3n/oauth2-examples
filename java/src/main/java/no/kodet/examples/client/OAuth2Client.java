@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
@@ -416,14 +415,14 @@ public class OAuth2Client {
         }
         final Instant now = clock.instant();
         return Jwts.builder()
-                .setId(UUID.randomUUID().toString())
-                .setIssuer(clientId)
-                .setSubject(clientId)
-                .setAudience(openIdWellKnownConfiguration.issuer())
-                .setIssuedAt(Date.from(now))
-                .setExpiration(Date.from(now.plus(60, SECONDS)))
-                .setNotBefore(Date.from(now.minus(60, SECONDS)))
-                .signWith(privateKey, SignatureAlgorithm.RS256).compact();
+                .id(UUID.randomUUID().toString())
+                .issuer(clientId)
+                .subject(clientId)
+                .audience().add(openIdWellKnownConfiguration.issuer()).and()
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(60, SECONDS)))
+                .notBefore(Date.from(now.minus(60, SECONDS)))
+                .signWith(privateKey, Jwts.SIG.RS256).compact();
     }
 
     private String extractQueryParameter(String query, String parameterName) {
